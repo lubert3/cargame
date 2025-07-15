@@ -1,10 +1,9 @@
 ﻿<!DOCTYPE html>
 <html lang="it">
 <head>
-    <link rel="manifest" href="manifest.json">
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gioco Auto 2D</title>
+    <title>Gioco Auto 2D con Sterzo</title>
     <style>
         body {
             margin: 0;
@@ -35,7 +34,6 @@
 
         button {
             padding: 12px 24px;
-            margin-top: 20px;
             font-size: 18px;
             background: #ff5722;
             color: white;
@@ -44,24 +42,32 @@
             cursor: pointer;
         }
 
-        #controls {
+        #steerContainer {
             position: absolute;
             bottom: 20px;
-            width: 100%;
-            display: flex;
-            justify-content: space-around;
+            width: 90%;
+            left: 5%;
             z-index: 1;
         }
 
-        .control-btn {
-            padding: 15px 30px;
-            font-size: 22px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px #00000050;
+        #steer {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 20px;
+            background: #444;
+            border-radius: 10px;
+            outline: none;
         }
+
+            #steer::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 40px;
+                height: 40px;
+                background: #2196f3;
+                border-radius: 50%;
+                cursor: pointer;
+                box-shadow: 0 0 5px #000;
+            }
 
         #scoreDisplay {
             position: absolute;
@@ -79,13 +85,12 @@
     </style>
 </head>
 <body>
-
     <canvas id="gameCanvas" width="480" height="640"></canvas>
 
     <div id="startScreen">
         <h2>🚗 Gioco Auto 2D</h2>
-        <p>Evita ostacoli e percorri più km possibile!</p>
-        <button id="startBtn">Inizia Partita</button>
+        <p>Scorri lo sterzo per muoverti!</p>
+        <button id="startBtn">Inizia</button>
     </div>
 
     <div id="gameOverScreen" style="display:none;">
@@ -96,17 +101,15 @@
 
     <div id="scoreDisplay">Km: 0</div>
 
-    <div id="controls">
-        <button class="control-btn" id="leftBtn">⬅️</button>
-        <button class="control-btn" id="rightBtn">➡️</button>
+    <div id="steerContainer">
+        <input type="range" id="steer" min="0" max="100" value="50" />
     </div>
 
     <script>const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
 
-        const roadWidth = 300; // più largo
-        const carWidth = 45;
-        const carHeight = 70;
+        const roadWidth = 300;
+        const carWidth = 45, carHeight = 70;
 
         let player, obstacles, speed, km, gameRunning, tick, spawnRate;
 
@@ -114,14 +117,19 @@
         const gameOverScreen = document.getElementById("gameOverScreen");
         const finalScore = document.getElementById("finalScore");
         const scoreDisplay = document.getElementById("scoreDisplay");
-        const leftBtn = document.getElementById("leftBtn");
-        const rightBtn = document.getElementById("rightBtn");
+        const steer = document.getElementById("steer");
 
         document.getElementById("startBtn").addEventListener("click", startGame);
-        leftBtn.addEventListener("touchstart", () => player.x -= 40);
-        rightBtn.addEventListener("touchstart", () => player.x += 40);
 
-        // Avvia la partita
+        // Mappa valore slider (0–100) alla posizione stradale
+        function updateSteer() {
+            const percent = (steer.value - 50) / 50; // -1 .. +1
+            const left = canvas.width / 2 - roadWidth / 2;
+            player.x = left + (roadWidth - player.width) * ((percent + 1) / 2);
+        }
+
+        steer.addEventListener("input", updateSteer);
+
         function startGame() {
             startScreen.style.display = "none";
             gameOverScreen.style.display = "none";
@@ -136,55 +144,47 @@
             km = 0;
             tick = 0;
             spawnRate = 90;
+            steer.value = 50;
             gameRunning = true;
             requestAnimationFrame(gameLoop);
         }
 
-        // Genera ostacoli
         function spawnObstacle() {
             const types = ["tree", "rock", "car"];
             const type = types[Math.floor(Math.random() * types.length)];
             const x = canvas.width / 2 - roadWidth / 2 + Math.random() * (roadWidth - carWidth);
-            obstacles.push({
-                x,
-                y: -carHeight,
-                width: carWidth,
-                height: carHeight,
-                type
-            });
+            obstacles.push({ x, y: -carHeight, width: carWidth, height: carHeight, type });
         }
 
-        // Disegna entità (auto, ostacoli)
         function drawEntity(e) {
             if (e === player) {
-                // Auto del giocatore
                 ctx.fillStyle = "#d32f2f";
                 ctx.fillRect(e.x, e.y, e.width, e.height);
                 ctx.fillStyle = "#eee";
-                ctx.fillRect(e.x + 10, e.y + 10, 25, 20); // parabrezza
+                ctx.fillRect(e.x + 10, e.y + 10, 25, 20);
                 ctx.strokeStyle = "#000";
                 ctx.lineWidth = 2;
                 ctx.strokeRect(e.x, e.y, e.width, e.height);
             } else {
-                // Ostacoli
-                if (e.type === "tree") {
-                    ctx.fillStyle = "#2e7d32";
-                    ctx.beginPath();
-                    ctx.arc(e.x + e.width / 2, e.y + e.height / 2, 25, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (e.type === "rock") {
-                    ctx.fillStyle = "#5d4037";
-                    ctx.beginPath();
-                    ctx.arc(e.x + 22, e.y + 30, 20, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (e.type === "car") {
-                    ctx.fillStyle = "#1976d2";
-                    ctx.fillRect(e.x + 3, e.y + 5, 39, 60);
+                switch (e.type) {
+                    case "tree":
+                        ctx.fillStyle = "#2e7d32";
+                        ctx.beginPath();
+                        ctx.arc(e.x + e.width / 2, e.y + e.height / 2, 25, 0, Math.PI * 2);
+                        ctx.fill(); break;
+                    case "rock":
+                        ctx.fillStyle = "#5d4037";
+                        ctx.beginPath();
+                        ctx.arc(e.x + 22, e.y + 30, 20, 0, Math.PI * 2);
+                        ctx.fill(); break;
+                    case "car":
+                        ctx.fillStyle = "#1976d2";
+                        ctx.fillRect(e.x + 3, e.y + 5, 39, 60);
+                        break;
                 }
             }
         }
 
-        // Verifica collisione
         function isColliding(a, b) {
             return (
                 a.x < b.x + b.width &&
@@ -194,20 +194,13 @@
             );
         }
 
-        // Disegna la strada
         function drawRoad() {
             const left = canvas.width / 2 - roadWidth / 2;
-
-            // Sfondo asfalto
             ctx.fillStyle = "#333";
             ctx.fillRect(left, 0, roadWidth, canvas.height);
-
-            // Bordi laterali
             ctx.fillStyle = "#888";
             ctx.fillRect(left - 10, 0, 10, canvas.height);
             ctx.fillRect(left + roadWidth, 0, 10, canvas.height);
-
-            // Linee tratteggiate centrali
             ctx.strokeStyle = "#ffffff88";
             ctx.lineWidth = 2;
             ctx.setLineDash([20, 20]);
@@ -216,76 +209,48 @@
             for (let i = 1; i < laneCount; i++) {
                 const x = left + i * laneWidth;
                 ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
                 ctx.stroke();
             }
             ctx.setLineDash([]);
         }
 
-        // Ciclo di gioco
         function gameLoop() {
             if (!gameRunning) return;
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawRoad();
 
-            // Aumenta difficoltà
             tick++;
             if (tick % 300 === 0) speed += 0.4;
             if (tick % 400 === 0 && spawnRate > 30) spawnRate -= 5;
 
-            // Aggiorna km
             km += speed * 0.1;
             scoreDisplay.textContent = `Km: ${Math.floor(km)}`;
 
-            // Comandi tastiera
-            document.onkeydown = (e) => {
-                if (e.key === "ArrowLeft") player.x -= 30;
-                if (e.key === "ArrowRight") player.x += 30;
-            };
+            updateSteer();
 
-            // Limiti laterali
-            const minX = canvas.width / 2 - roadWidth / 2;
-            const maxX = canvas.width / 2 + roadWidth / 2 - player.width;
-            player.x = Math.max(minX, Math.min(maxX, player.x));
-
-            // Disegna il giocatore
             drawEntity(player);
 
-            // Nuovi ostacoli
             if (tick % spawnRate === 0) spawnObstacle();
 
-            // Aggiorna ostacoli
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 const obs = obstacles[i];
                 obs.y += speed;
                 drawEntity(obs);
-
                 if (isColliding(player, obs)) {
                     endGame();
                     return;
                 }
-
                 if (obs.y > canvas.height) obstacles.splice(i, 1);
             }
 
             requestAnimationFrame(gameLoop);
         }
 
-        // Fine partita
         function endGame() {
             gameRunning = false;
             finalScore.textContent = `Hai percorso ${Math.floor(km)} km`;
             gameOverScreen.style.display = "block";
         }</script>
-    <script>if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker
-        .register("service-worker.js")
-        .then(reg => console.log("Service Worker registrato:", reg.scope))
-        .catch(err => console.error("Errore Service Worker:", err));
-    });
-  }</script>
 </body>
 </html>
